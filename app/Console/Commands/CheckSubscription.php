@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Jobs\SendExpiredSubscriptionMail;
 use App\Models\Subscription;
+use App\Models\SubscriptionLog;
 use App\Models\User;
 use App\Services\SubscriptionService;
 use App\Strategies\AndroidSubscription;
@@ -44,6 +45,7 @@ class CheckSubscription extends Command
     public function handle()
     {
         $subscriptions = Subscription::all();
+        $subscriptionFailedCount = 0;
         foreach ($subscriptions as $subscription){
             $platform = $subscription->platform->name;
 
@@ -73,14 +75,22 @@ class CheckSubscription extends Command
                     $status = $responseData['latest_receipt_info'][0]['subscription_status'];
                 }
 
-                if ($subscription->status === 'active' && $status === 'expired') {
-                    dispatch(new SendExpiredSubscriptionMail($subscription));
-//                from subscription relations we can get user name , application name and platform
+                if ($status === 'expired') {
+                    $subscriptionFailedCount++;
+                    if ($subscription->status === 'active') {
+                        dispatch(new SendExpiredSubscriptionMail($subscription));
+//                      from subscription relations we can get user name , application name and platform
+                    }
                 }
 
                 $subscription->status = $status;
                 $subscription->save();
             }
         }
+
+        SubscriptionLog::create([
+            'count' => $subscriptionFailedCount
+        ]);
+
     }
 }
